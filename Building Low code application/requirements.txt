@@ -1,10 +1,17 @@
-# requirements.txt
+# Core application
+streamlit>=1.48,<2
+pandas>=2.2,<3
+numpy>=1.26,<3
+scikit-learn>=1.5,<2
 
-streamlit==0.89.0
-pandas==1.3.3
-numpy==1.19.5
-pandas-profiling==3.0.0
-scikit-learn==0.24.2
-matplotlib==3.4.3
-seaborn==0.11.2
-pycaret==2.3.4
+# AutoML
+pycaret[full]>=3.3,<4
+
+# Exploratory data analysis
+# ydata-profiling replaces the deprecated pandas-profiling package.
+ydata-profiling>=4.12,<5
+streamlit-pandas-profiling>=0.1,<1
+
+# Data visualization compatibility for the broader PyCaret stack
+matplotlib>=3.8,<4
+seaborn>=0.13,<1
