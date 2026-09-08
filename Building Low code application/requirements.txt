@@ -8,10 +8,9 @@ scikit-learn>=1.5,<2
 pycaret[full]>=3.3,<4
 
 # Exploratory data analysis
-# ydata-profiling replaces the deprecated pandas-profiling package.
 ydata-profiling>=4.12,<5
 streamlit-pandas-profiling>=0.1,<1
 
-# Data visualization compatibility for the broader PyCaret stack
+# Visualization
 matplotlib>=3.8,<4
 seaborn>=0.13,<1
