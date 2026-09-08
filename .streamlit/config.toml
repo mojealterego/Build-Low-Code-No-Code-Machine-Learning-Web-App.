@@ -1,0 +1,15 @@
+[server]
+headless = true
+enableCORS = true
+maxUploadSize = 200
+
+[client]
+showErrorDetails = "friendly"
+
+[theme]
+base = "dark"
+primaryColor = "#D4AF37"
+backgroundColor = "#0B0B0D"
+secondaryBackgroundColor = "#0E0E11"
+textColor = "#F8F7F4"
+font = "sans serif"
