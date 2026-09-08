@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from sklearn.metrics import accuracy_score, f1_score, mean_absolute_error, mean_squared_error, r2_score
-from sklearn.preprocessing import LabelEncoder
 
 try:
     from ydata_profiling import ProfileReport
@@ -140,7 +139,7 @@ def initialise_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def read_csv_safely(uploaded_file) -> pd.DataFrame:
+def read_csv_safely(uploaded_file: Any) -> pd.DataFrame:
     raw = uploaded_file.getvalue()
     if len(raw) > MAX_UPLOAD_MB * 1024 * 1024:
         raise ValueError(f"Plik przekracza limit {MAX_UPLOAD_MB} MB.")
@@ -164,7 +163,7 @@ def upload_data() -> pd.DataFrame | None:
     if uploaded is None:
         return st.session_state.raw_data
 
-    if st.session_state.source_name == uploaded.name:
+    if st.session_state.source_name == uploaded.name and st.session_state.raw_data is not None:
         return st.session_state.raw_data
 
     try:
@@ -180,6 +179,7 @@ def upload_data() -> pd.DataFrame | None:
     st.session_state.raw_data = data
     st.session_state.source_name = uploaded.name
     st.session_state.prepared_data = None
+    st.session_state.target = None
     st.session_state.best_model = None
     st.session_state.tuned_model = None
     st.session_state.best_predictions = None
@@ -190,6 +190,7 @@ def upload_data() -> pd.DataFrame | None:
 def clean_data(data: pd.DataFrame) -> pd.DataFrame:
     cleaned = data.copy()
     cleaned.columns = [str(column).strip() for column in cleaned.columns]
+    cleaned.columns = [column or f"column_{index + 1}" for index, column in enumerate(cleaned.columns)]
     cleaned = cleaned.loc[:, ~cleaned.columns.duplicated()].copy()
 
     for column in cleaned.columns:
@@ -207,6 +208,8 @@ def clean_data(data: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_for_pycaret(data: pd.DataFrame, target: str) -> pd.DataFrame:
+    if target not in data.columns:
+        raise ValueError("Wybrana zmienna docelowa nie istnieje w przygotowanym zbiorze danych.")
     prepared = data.copy()
     for column in prepared.columns:
         if column == target:
@@ -345,14 +348,14 @@ def run_automl(data: pd.DataFrame, target: str, task: str, test_size: float) -> 
     return model, normalise_predictions(prediction, target)
 
 
-def tune_selected_model(model: Any, task: str) -> tuple[Any, pd.DataFrame]:
+def tune_selected_model(model: Any, task: str, target: str) -> tuple[Any, pd.DataFrame]:
     if task == "Classification":
         tuned = tune_model(model, optimize="F1", verbose=False)
         prediction = predict_model(tuned, verbose=False)
     else:
         tuned = tune_model_reg(model, optimize="R2", verbose=False)
         prediction = predict_model_reg(tuned, verbose=False)
-    return tuned, normalise_predictions(prediction, st.session_state.target)
+    return tuned, normalise_predictions(prediction, target)
 
 
 def export_model(model: Any, task: str, model_name: str, metadata: dict[str, Any]) -> tuple[bytes, bytes, str]:
@@ -372,7 +375,14 @@ def sidebar_controls(data: pd.DataFrame | None) -> tuple[float, bool]:
         st.markdown("### AURELIS AI")
         st.caption("Intelligence, refined.")
         st.divider()
-        test_size = st.slider("Rozmiar zbioru testowego", 0.10, 0.40, 0.20, 0.05)
+        test_size = st.slider(
+            "Rozmiar zbioru testowego",
+            min_value=0.10,
+            max_value=0.40,
+            value=0.20,
+            step=0.05,
+            help="Część danych pozostawiona poza treningiem do końcowej oceny modelu.",
+        )
         run_requested = st.button("Uruchom AutoML", type="primary", use_container_width=True, disabled=data is None)
         st.divider()
         st.caption("PyCaret · seed 42 · równoległość CPU: -1")
@@ -409,7 +419,7 @@ def main() -> None:
         st.dataframe(cleaned.head(100), use_container_width=True)
         st.caption(f"Źródło: {st.session_state.source_name or 'CSV'} · Po czyszczeniu: {len(cleaned):,} wierszy")
     with tab_quality:
-        render_quality(cleaned, target)
+        render_quality(data, target)
         render_eda(cleaned)
 
     with tab_models:
@@ -441,7 +451,7 @@ def main() -> None:
             if st.button("Strojenie hiperparametrów", use_container_width=True):
                 with st.spinner("Strojenie modelu…"):
                     try:
-                        tuned, tuned_predictions = tune_selected_model(model, task)
+                        tuned, tuned_predictions = tune_selected_model(model, task, target)
                         st.session_state.tuned_model = tuned
                         st.session_state.tuned_predictions = tuned_predictions
                         st.success("Model został dostrojony.")
@@ -483,6 +493,12 @@ def main() -> None:
                 "target": target,
                 "model_name": safe_model_name(st.session_state.model_name),
                 "random_state": RANDOM_STATE,
+                "test_size": test_size,
+                "rows_before_cleaning": int(len(data)),
+                "rows_after_cleaning": int(len(cleaned)),
+                "columns": int(cleaned.shape[1]),
+                "missing_values_before_cleaning": int(data.isna().sum().sum()),
+                "duplicate_rows_before_cleaning": int(data.duplicated().sum()),
             }
             try:
                 model_bytes, metadata_bytes, model_filename = export_model(
